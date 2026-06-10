@@ -52,11 +52,17 @@
       <form class="auth-form" @submit.prevent="handleAuth">
         <div class="form-row">
           <label>邮箱</label>
-          <input type="email" v-model="authForm.email" placeholder="your@email.com" required>
+          <div class="auth-input-wrapper">
+            <span class="auth-input-icon">✉</span>
+            <input type="email" v-model="authForm.email" placeholder="your@email.com" required>
+          </div>
         </div>
         <div class="form-row">
           <label>密码</label>
-          <input type="password" v-model="authForm.password" placeholder="至少 6 位" minlength="6" required>
+          <div class="auth-input-wrapper">
+            <span class="auth-input-icon">🔒</span>
+            <input type="password" v-model="authForm.password" placeholder="至少 6 位" minlength="6" required>
+          </div>
         </div>
         <p v-if="authError" class="auth-error">{{ authError }}</p>
         <button type="submit" class="btn btn-primary btn-block">
