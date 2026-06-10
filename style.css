@@ -224,6 +224,7 @@
   .bank-card.large { min-height: 180px; padding: 24px; }
   
   .bank-card-header { display: flex; justify-content: space-between; align-items: center; }
+  .card-actions { display: flex; gap: 4px; }
   .bank-card-type {
     font-size: 12px;
     background: rgba(255,255,255,0.2);
@@ -1034,6 +1035,13 @@
     background: var(--danger-bg);
     padding: 8px 12px;
     border-radius: var(--radius-sm);
+  }
+
+  .auth-hint {
+    color: var(--text-secondary, #6B7280);
+    font-size: 12px;
+    margin-top: 10px;
+    text-align: center;
   }
 
   .config-hint {

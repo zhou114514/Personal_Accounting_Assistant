@@ -1,5 +1,7 @@
 const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
 
+let _registerCooldownTimer = null;
+
 const STORAGE_KEYS = {
   cards: 'fa_cards',
   transactions: 'fa_transactions',
@@ -98,6 +100,8 @@ const app = createApp({
       configReady: FaStore.isConfigured(),
       authLoading: true,
       dataLoading: false,
+      authSubmitting: false,
+      registerCooldownLeft: 0,
       user: null,
       authMode: 'login',
       authForm: { email: '', password: '' },
@@ -137,6 +141,7 @@ const app = createApp({
       },
 
       newCard: { name: '', type: 'debit', balance: 0, creditLimit: 0, color: CARD_COLORS[0] },
+      editCardForm: { id: '', name: '', type: 'debit', balance: 0, creditLimit: 0, color: CARD_COLORS[0], createdAt: 0 },
       newCategory: { name: '', type: 'expense', icon: '📦' },
 
       recordFilter: {
@@ -377,6 +382,18 @@ const app = createApp({
       if (s >= 30) return '生活质量偏低';
       return '需要关注财务状况';
     },
+
+    authButtonDisabled() {
+      return this.authSubmitting || (this.authMode === 'register' && this.registerCooldownLeft > 0);
+    },
+
+    authButtonText() {
+      if (this.authSubmitting) return '处理中...';
+      if (this.authMode === 'register' && this.registerCooldownLeft > 0) {
+        return `请等待 ${this.registerCooldownLeft}s`;
+      }
+      return this.authMode === 'login' ? '登录' : '注册';
+    },
   },
 
   watch: {
@@ -471,23 +488,52 @@ const app = createApp({
 
     async handleAuth() {
       this.authError = '';
+
+      if (this.authMode === 'register' && this.registerCooldownLeft > 0) {
+        this.authError = `请等待 ${this.registerCooldownLeft} 秒后再试`;
+        return;
+      }
+
       const { email, password } = this.authForm;
       if (!email.trim() || !password) {
         this.authError = '请输入邮箱和密码';
         return;
       }
+
+      this.authSubmitting = true;
       try {
         if (this.authMode === 'login') {
           await FaStore.signIn(email.trim(), password);
           this.showToast('登录成功', 'success');
         } else {
           await FaStore.signUp(email.trim(), password);
-          this.showToast('注册成功', 'success');
+          this.showToast('注册成功，请查收验证邮件', 'success');
+          this.startRegisterCooldown(60);
         }
         this.authForm.password = '';
       } catch (err) {
-        this.authError = err.message || '认证失败';
+        let msg = err.message || '认证失败';
+        if (msg.toLowerCase().includes('email rate limit exceeded')) {
+          msg = '邮件发送过于频繁，请稍后再试（Supabase 免费版每小时限发 4 封验证邮件）';
+          this.startRegisterCooldown(300);
+        }
+        this.authError = msg;
+      } finally {
+        this.authSubmitting = false;
       }
+    },
+
+    startRegisterCooldown(seconds) {
+      this.registerCooldownLeft = seconds;
+      if (_registerCooldownTimer) clearInterval(_registerCooldownTimer);
+      _registerCooldownTimer = setInterval(() => {
+        this.registerCooldownLeft--;
+        if (this.registerCooldownLeft <= 0) {
+          this.registerCooldownLeft = 0;
+          clearInterval(_registerCooldownTimer);
+          _registerCooldownTimer = null;
+        }
+      }, 1000);
     },
 
     async handleLogout() {
@@ -614,6 +660,49 @@ const app = createApp({
         this.showToast('卡片添加成功', 'success');
       } catch (err) {
         this.showToast('添加失败: ' + err.message, 'error');
+      }
+    },
+
+    openEditCard(card) {
+      this.editCardForm = {
+        id: card.id,
+        name: card.name,
+        type: card.type,
+        balance: card.type === 'credit' ? this.getCardDebt(card) : card.balance,
+        creditLimit: card.creditLimit || 0,
+        color: card.color,
+        createdAt: card.createdAt,
+      };
+      this.showModal('editCard');
+    },
+
+    async saveEditCard() {
+      if (!this.editCardForm.name.trim()) {
+        this.showToast('请输入卡片名称', 'error');
+        return;
+      }
+      const idx = this.cards.findIndex(c => c.id === this.editCardForm.id);
+      if (idx === -1) return;
+
+      const card = {
+        id: this.editCardForm.id,
+        name: this.editCardForm.name.trim(),
+        type: this.editCardForm.type,
+        balance: this.editCardForm.type === 'credit'
+          ? -(this.editCardForm.balance || 0)
+          : (this.editCardForm.balance || 0),
+        creditLimit: this.editCardForm.type === 'credit' ? (this.editCardForm.creditLimit || 0) : 0,
+        color: this.editCardForm.color,
+        createdAt: this.editCardForm.createdAt,
+      };
+
+      try {
+        await this.persistCard(card);
+        this.cards[idx] = card;
+        this.closeModal();
+        this.showToast('卡片已更新', 'success');
+      } catch (err) {
+        this.showToast('更新失败: ' + err.message, 'error');
       }
     },
 

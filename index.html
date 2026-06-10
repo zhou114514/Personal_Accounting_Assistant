@@ -65,9 +65,12 @@
           </div>
         </div>
         <p v-if="authError" class="auth-error">{{ authError }}</p>
-        <button type="submit" class="btn btn-primary btn-block">
-          {{ authMode === 'login' ? '登录' : '注册' }}
+        <button type="submit" class="btn btn-primary btn-block" :disabled="authButtonDisabled">
+          {{ authButtonText }}
         </button>
+        <p v-if="authMode === 'register' && registerCooldownLeft > 0" class="auth-hint">
+          为防止频繁请求，请 {{ registerCooldownLeft }} 秒后再次尝试注册
+        </p>
       </form>
     </div>
   </div>
@@ -227,7 +230,10 @@
         <div v-for="card in cards" :key="card.id" class="bank-card large" :style="{'--card-color': card.color}">
           <div class="bank-card-header">
             <span class="bank-card-type">{{ card.type === 'debit' ? '储蓄卡' : '信用卡' }}</span>
-            <button class="btn-icon" @click="confirmDeleteCard(card)" title="删除">🗑️</button>
+            <div class="card-actions">
+              <button class="btn-icon" @click="openEditCard(card)" title="编辑">✏️</button>
+              <button class="btn-icon" @click="confirmDeleteCard(card)" title="删除">🗑️</button>
+            </div>
           </div>
           <div class="bank-card-name">{{ card.name }}</div>
           <div class="bank-card-balance">
@@ -610,6 +616,54 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" @click="closeModal">取消</button>
         <button class="btn btn-primary" @click="addCard">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 编辑卡片弹窗 -->
+  <div class="modal-overlay" v-if="activeModal === 'editCard'" @click.self="closeModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>编辑卡片</h2>
+        <button class="btn-icon" @click="closeModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>卡片名称</label>
+          <input type="text" v-model="editCardForm.name" placeholder="如：工商银行储蓄卡">
+        </div>
+        <div class="form-row">
+          <label>卡片类型</label>
+          <div class="type-tabs small">
+            <button :class="{active: editCardForm.type === 'debit'}" disabled>储蓄卡</button>
+            <button :class="{active: editCardForm.type === 'credit'}" disabled>信用卡</button>
+          </div>
+          <span class="form-hint">卡片类型创建后不可修改</span>
+        </div>
+        <div class="form-row" v-if="editCardForm.type === 'debit'">
+          <label>当前余额</label>
+          <input type="number" v-model.number="editCardForm.balance" placeholder="0.00" step="0.01">
+        </div>
+        <div class="form-row" v-if="editCardForm.type === 'credit'">
+          <label>信用额度</label>
+          <input type="number" v-model.number="editCardForm.creditLimit" placeholder="信用额度" step="0.01">
+        </div>
+        <div class="form-row" v-if="editCardForm.type === 'credit'">
+          <label>当前待还金额</label>
+          <input type="number" v-model.number="editCardForm.balance" placeholder="已有负债金额（可为0）" step="0.01">
+        </div>
+        <div class="form-row">
+          <label>卡片颜色</label>
+          <div class="color-options">
+            <span v-for="c in cardColors" :key="c" class="color-dot"
+                  :style="{background: c}" :class="{active: editCardForm.color === c}"
+                  @click="editCardForm.color = c"></span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="closeModal">取消</button>
+        <button class="btn btn-primary" @click="saveEditCard">保存修改</button>
       </div>
     </div>
   </div>
