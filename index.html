@@ -231,8 +231,8 @@
           <div class="bank-card-header">
             <span class="bank-card-type">{{ card.type === 'debit' ? '储蓄卡' : '信用卡' }}</span>
             <div class="card-actions">
-              <button class="btn-icon" @click="openEditCard(card)" title="编辑">✏️</button>
-              <button class="btn-icon" @click="confirmDeleteCard(card)" title="删除">🗑️</button>
+              <button type="button" class="btn-icon" @click.stop="openEditCard(card)" title="编辑">✏️</button>
+              <button type="button" class="btn-icon" @click.stop="confirmDeleteCard(card)" title="删除">🗑️</button>
             </div>
           </div>
           <div class="bank-card-name">{{ card.name }}</div>

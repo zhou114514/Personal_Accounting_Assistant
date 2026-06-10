@@ -219,11 +219,18 @@
     height: 120px;
     background: rgba(255,255,255,0.1);
     border-radius: 50%;
+    pointer-events: none;
   }
   .bank-card:hover { transform: translateY(-3px); }
   .bank-card.large { min-height: 180px; padding: 24px; }
   
-  .bank-card-header { display: flex; justify-content: space-between; align-items: center; }
+  .bank-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
   .card-actions { display: flex; gap: 4px; }
   .bank-card-type {
     font-size: 12px;
