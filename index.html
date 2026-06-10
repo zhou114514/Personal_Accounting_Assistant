@@ -323,7 +323,9 @@
           <input type="text" v-model="txForm.description" placeholder="备注说明（选填）">
         </div>
 
-        <button class="btn btn-primary btn-block" @click="addTransaction">确认记账</button>
+        <button class="btn btn-primary btn-block" @click="addTransaction" :disabled="txSubmitting">
+          {{ txSubmitting ? '记账中...' : '确认记账' }}
+        </button>
       </div>
     </div>
 

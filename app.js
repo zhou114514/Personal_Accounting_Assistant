@@ -111,6 +111,7 @@ const app = createApp({
       sidebarCollapsed: false,
       showMobileUserMenu: false,
       activeModal: null,
+      txSubmitting: false,
 
       cards: [],
       transactions: [],
@@ -449,6 +450,16 @@ const app = createApp({
       this.showMigrateBanner = false;
     },
 
+    // 按名称去重，保留每个名称的第一条（防止数据库中存在重复分类记录）
+    dedupeCategories(cats) {
+      const seen = new Set();
+      return cats.filter(c => {
+        if (seen.has(c.name)) return false;
+        seen.add(c.name);
+        return true;
+      });
+    },
+
     async loadCloudData() {
       if (!this.user) return;
       this.dataLoading = true;
@@ -468,12 +479,16 @@ const app = createApp({
         } else {
           this.cards = data.cards;
           this.transactions = data.transactions;
-          this.expenseCategories = data.expenseCategories.length
-            ? data.expenseCategories
-            : DEFAULT_EXPENSE_CATEGORIES.map(c => ({ ...c, id: uid() }));
-          this.incomeCategories = data.incomeCategories.length
-            ? data.incomeCategories
-            : DEFAULT_INCOME_CATEGORIES.map(c => ({ ...c, id: uid() }));
+          this.expenseCategories = this.dedupeCategories(
+            data.expenseCategories.length
+              ? data.expenseCategories
+              : DEFAULT_EXPENSE_CATEGORIES.map(c => ({ ...c, id: uid() }))
+          );
+          this.incomeCategories = this.dedupeCategories(
+            data.incomeCategories.length
+              ? data.incomeCategories
+              : DEFAULT_INCOME_CATEGORIES.map(c => ({ ...c, id: uid() }))
+          );
           this.settings = data.settings || { payday: 10 };
         }
 
@@ -761,6 +776,7 @@ const app = createApp({
 
     // ========== 交易管理 ==========
     async addTransaction() {
+      if (this.txSubmitting) return;
       const f = this.txForm;
 
       if (!f.amount || f.amount <= 0) {
@@ -804,6 +820,7 @@ const app = createApp({
       const affectedCards = this.getAffectedCards(tx);
       this.updateCardBalance(tx);
 
+      this.txSubmitting = true;
       try {
         await this.persistTransaction(tx);
         await this.persistCards(affectedCards);
@@ -825,6 +842,8 @@ const app = createApp({
       } catch (err) {
         this.reverseCardBalance(tx);
         this.showToast('记账失败: ' + err.message, 'error');
+      } finally {
+        this.txSubmitting = false;
       }
     },
 

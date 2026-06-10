@@ -173,13 +173,19 @@ const FaStore = (() => {
 
   async function seedDefaults(userId, expenseCategories, incomeCategories) {
     const sb = getClient();
-    const cats = [
-      ...expenseCategories.map(c => catToRow(c, userId)),
-      ...incomeCategories.map(c => catToRow(c, userId)),
-    ];
-    const { error: catErr } = await sb.from('categories').insert(cats);
-    if (catErr) throw catErr;
-    const { error: setErr } = await sb.from('user_settings').insert({ user_id: userId, payday: 10 });
+
+    // 先检查是否已有分类，有则跳过，防止重复插入
+    const { data: existing } = await sb.from('categories').select('id').eq('user_id', userId).limit(1);
+    if (!existing || existing.length === 0) {
+      const cats = [
+        ...expenseCategories.map(c => catToRow(c, userId)),
+        ...incomeCategories.map(c => catToRow(c, userId)),
+      ];
+      const { error: catErr } = await sb.from('categories').insert(cats);
+      if (catErr) throw catErr;
+    }
+
+    const { error: setErr } = await sb.from('user_settings').upsert({ user_id: userId, payday: 10 });
     if (setErr) throw setErr;
   }
 
