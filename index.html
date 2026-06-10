@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>记账助手</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="supabase.js"></script>
+</head>
+<body>
+<div id="app">
+  <!-- 未配置 Supabase -->
+  <div v-if="!configReady" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">💰</div>
+      <h1>记账助手</h1>
+      <p class="auth-subtitle">尚未配置 Supabase</p>
+      <div class="config-hint">
+        <p>请按以下步骤操作：</p>
+        <ol>
+          <li>复制 <code>config.example.js</code> 为 <code>config.js</code></li>
+          <li>填入 Supabase 项目的 URL 和 anon key</li>
+          <li>在 Supabase SQL Editor 执行 <code>supabase/schema.sql</code></li>
+          <li>刷新此页面</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- 加载中 -->
+  <div v-else-if="authLoading" class="auth-screen">
+    <div class="auth-card loading-card">
+      <div class="spinner"></div>
+      <p>正在连接云端...</p>
+    </div>
+  </div>
+
+  <!-- 登录 / 注册 -->
+  <div v-else-if="!user" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">💰</div>
+      <h1>记账助手</h1>
+      <p class="auth-subtitle">登录后数据云端同步，随时随地访问</p>
+      <div class="auth-tabs">
+        <button :class="{active: authMode === 'login'}" @click="authMode = 'login'; authError = ''">登录</button>
+        <button :class="{active: authMode === 'register'}" @click="authMode = 'register'; authError = ''">注册</button>
+      </div>
+      <form class="auth-form" @submit.prevent="handleAuth">
+        <div class="form-row">
+          <label>邮箱</label>
+          <input type="email" v-model="authForm.email" placeholder="your@email.com" required>
+        </div>
+        <div class="form-row">
+          <label>密码</label>
+          <input type="password" v-model="authForm.password" placeholder="至少 6 位" minlength="6" required>
+        </div>
+        <p v-if="authError" class="auth-error">{{ authError }}</p>
+        <button type="submit" class="btn btn-primary btn-block">
+          {{ authMode === 'login' ? '登录' : '注册' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 主应用 -->
+  <template v-else>
+  <!-- 数据加载遮罩 -->
+  <div v-if="dataLoading" class="data-loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- 本地数据迁移提示 -->
+  <div v-if="showMigrateBanner" class="migrate-banner">
+    <span>检测到浏览器中有旧的本地数据，是否上传到云端？</span>
+    <button class="btn btn-primary btn-sm" @click="migrateLocalData">立即迁移</button>
+    <button class="btn btn-secondary btn-sm" @click="showMigrateBanner = false">忽略</button>
+  </div>
+
+  <!-- 侧边栏 -->
+  <aside class="sidebar" :class="{collapsed: sidebarCollapsed}">
+    <div class="sidebar-header">
+      <span class="logo-icon">💰</span>
+      <span class="logo-text" v-show="!sidebarCollapsed">记账助手</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a v-for="item in navItems" :key="item.view"
+         @click="switchView(item.view)"
+         :class="{active: currentView === item.view}">
+        <span class="nav-icon">{{ item.icon }}</span>
+        <span class="nav-text" v-show="!sidebarCollapsed">{{ item.label }}</span>
+      </a>
+    </nav>
+    <div class="sidebar-user" v-show="!sidebarCollapsed">
+      <div class="user-email">{{ user.email }}</div>
+      <button class="btn-logout" @click="handleLogout">退出登录</button>
+    </div>
+    <div class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+      <span>{{ sidebarCollapsed ? '▶' : '◀' }}</span>
+    </div>
+  </aside>
+
+  <!-- 主内容区 -->
+  <main class="main-content">
+    <!-- ==================== 仪表盘 ==================== -->
+    <div v-if="currentView === 'dashboard'" class="view">
+      <h1 class="view-title">财务概览</h1>
+
+      <div class="summary-row">
+        <div class="summary-card card-balance">
+          <div class="summary-icon">🏦</div>
+          <div class="summary-info">
+            <span class="summary-label">总余额</span>
+            <span class="summary-amount positive">¥{{ formatMoney(totalBalance) }}</span>
+          </div>
+        </div>
+        <div class="summary-card card-debt">
+          <div class="summary-icon">💳</div>
+          <div class="summary-info">
+            <span class="summary-label">总负债</span>
+            <span class="summary-amount negative">¥{{ formatMoney(totalDebt) }}</span>
+          </div>
+        </div>
+        <div class="summary-card card-net">
+          <div class="summary-icon">📊</div>
+          <div class="summary-info">
+            <span class="summary-label">净资产</span>
+            <span class="summary-amount" :class="netWorth >= 0 ? 'positive' : 'negative'">
+              ¥{{ formatMoney(netWorth) }}
+            </span>
+          </div>
+        </div>
+        <div class="summary-card card-period">
+          <div class="summary-icon">📅</div>
+          <div class="summary-info">
+            <span class="summary-label">本期支出</span>
+            <span class="summary-amount negative">¥{{ formatMoney(currentPeriodExpense) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 卡片概览 -->
+      <div class="section-title">我的卡片</div>
+      <div class="cards-grid">
+        <div v-for="card in cards" :key="card.id" class="bank-card" :style="{'--card-color': card.color}">
+          <div class="bank-card-type">{{ card.type === 'debit' ? '储蓄卡' : '信用卡' }}</div>
+          <div class="bank-card-name">{{ card.name }}</div>
+          <div class="bank-card-balance">
+            <template v-if="card.type === 'debit'">
+              <span class="balance-label">余额</span>
+              <span class="balance-value">¥{{ formatMoney(card.balance) }}</span>
+            </template>
+            <template v-else>
+              <span class="balance-label">待还金额</span>
+              <span class="balance-value debt">¥{{ formatMoney(getCardDebt(card)) }}</span>
+              <span class="credit-limit">额度: ¥{{ formatMoney(card.creditLimit) }}</span>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- 图表区 -->
+      <div class="charts-row">
+        <div class="chart-box">
+          <div class="chart-title">本期消费趋势</div>
+          <canvas id="dashTrendChart"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">支出分类占比</div>
+          <canvas id="dashCategoryChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 最近交易 -->
+      <div class="section-title">最近交易</div>
+      <div class="transaction-list">
+        <div v-for="tx in recentTransactions" :key="tx.id" class="transaction-item">
+          <div class="tx-icon" :class="'tx-' + tx.type">
+            {{ tx.type === 'expense' ? '📤' : tx.type === 'income' ? '📥' : '🔄' }}
+          </div>
+          <div class="tx-info">
+            <div class="tx-desc">{{ tx.description || tx.category }}</div>
+            <div class="tx-meta">{{ tx.category }} · {{ getCardName(tx.type === 'transfer' ? tx.fromCardId : tx.cardId) }} · {{ formatDate(tx.date) }}</div>
+          </div>
+          <div class="tx-amount" :class="tx.type === 'income' ? 'positive' : 'negative'">
+            {{ tx.type === 'income' ? '+' : '-' }}¥{{ formatMoney(tx.amount) }}
+          </div>
+        </div>
+        <div v-if="recentTransactions.length === 0" class="empty-state">暂无交易记录</div>
+      </div>
+    </div>
+
+    <!-- ==================== 卡片管理 ==================== -->
+    <div v-if="currentView === 'cards'" class="view">
+      <div class="view-header">
+        <h1 class="view-title">卡片管理</h1>
+        <button class="btn btn-primary" @click="showModal('addCard')">+ 添加卡片</button>
+      </div>
+
+      <div class="cards-grid large">
+        <div v-for="card in cards" :key="card.id" class="bank-card large" :style="{'--card-color': card.color}">
+          <div class="bank-card-header">
+            <span class="bank-card-type">{{ card.type === 'debit' ? '储蓄卡' : '信用卡' }}</span>
+            <button class="btn-icon" @click="confirmDeleteCard(card)" title="删除">🗑️</button>
+          </div>
+          <div class="bank-card-name">{{ card.name }}</div>
+          <div class="bank-card-balance">
+            <template v-if="card.type === 'debit'">
+              <span class="balance-label">当前余额</span>
+              <span class="balance-value">¥{{ formatMoney(card.balance) }}</span>
+            </template>
+            <template v-else>
+              <span class="balance-label">待还金额</span>
+              <span class="balance-value debt">¥{{ formatMoney(getCardDebt(card)) }}</span>
+              <span class="credit-limit">信用额度: ¥{{ formatMoney(card.creditLimit) }}</span>
+              <span class="credit-available">可用额度: ¥{{ formatMoney(card.creditLimit - getCardDebt(card)) }}</span>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 记一笔 ==================== -->
+    <div v-if="currentView === 'transaction'" class="view">
+      <h1 class="view-title">记一笔</h1>
+
+      <!-- 交易类型切换 -->
+      <div class="type-tabs">
+        <button :class="{active: txForm.type === 'expense'}" @click="txForm.type = 'expense'">💸 支出</button>
+        <button :class="{active: txForm.type === 'income'}" @click="txForm.type = 'income'">💰 收入</button>
+        <button :class="{active: txForm.type === 'transfer'}" @click="txForm.type = 'transfer'">🔄 转账</button>
+      </div>
+
+      <div class="form-card">
+        <div class="form-row">
+          <label>日期</label>
+          <input type="date" v-model="txForm.date">
+        </div>
+
+        <div class="form-row" v-if="txForm.type !== 'transfer'">
+          <label>分类</label>
+          <div class="category-select">
+            <div v-for="cat in (txForm.type === 'expense' ? expenseCategories : incomeCategories)"
+                 :key="cat.id" class="category-chip"
+                 :class="{active: txForm.category === cat.name}"
+                 @click="txForm.category = cat.name">
+              {{ cat.icon }} {{ cat.name }}
+            </div>
+            <div class="category-chip add" @click="showModal('addCategory')">+ 自定义</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>金额</label>
+          <input type="number" v-model.number="txForm.amount" placeholder="请输入金额" step="0.01" min="0">
+        </div>
+
+        <div class="form-row" v-if="txForm.type !== 'transfer'">
+          <label>{{ txForm.type === 'expense' ? '消费卡' : '收入目标卡' }}</label>
+          <select v-model="txForm.cardId">
+            <option value="">请选择卡片</option>
+            <option v-for="card in cards" :key="card.id" :value="card.id">
+              {{ card.name }} ({{ card.type === 'debit' ? '储蓄卡' : '信用卡' }})
+            </option>
+          </select>
+        </div>
+
+        <template v-if="txForm.type === 'transfer'">
+          <div class="form-row">
+            <label>转出卡</label>
+            <select v-model="txForm.fromCardId">
+              <option value="">请选择卡片</option>
+              <option v-for="card in cards" :key="card.id" :value="card.id">
+                {{ card.name }}
+              </option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>转入卡</label>
+            <select v-model="txForm.toCardId">
+              <option value="">请选择卡片</option>
+              <option v-for="card in cards" :key="card.id" :value="card.id" :disabled="card.id === txForm.fromCardId">
+                {{ card.name }}
+              </option>
+            </select>
+          </div>
+        </template>
+
+        <div class="form-row">
+          <label>备注</label>
+          <input type="text" v-model="txForm.description" placeholder="备注说明（选填）">
+        </div>
+
+        <button class="btn btn-primary btn-block" @click="addTransaction">确认记账</button>
+      </div>
+    </div>
+
+    <!-- ==================== 账单记录 ==================== -->
+    <div v-if="currentView === 'records'" class="view">
+      <div class="view-header">
+        <h1 class="view-title">账单记录</h1>
+      </div>
+
+      <!-- 筛选器 -->
+      <div class="filter-bar">
+        <select v-model="recordFilter.type">
+          <option value="all">全部类型</option>
+          <option value="expense">支出</option>
+          <option value="income">收入</option>
+          <option value="transfer">转账</option>
+        </select>
+        <select v-model="recordFilter.cardId">
+          <option value="all">全部卡片</option>
+          <option v-for="card in cards" :key="card.id" :value="card.id">{{ card.name }}</option>
+        </select>
+        <select v-model="recordFilter.category">
+          <option value="all">全部分类</option>
+          <option v-for="cat in allCategories" :key="cat.id" :value="cat.name">{{ cat.name }}</option>
+        </select>
+        <input type="date" v-model="recordFilter.startDate">
+        <span>至</span>
+        <input type="date" v-model="recordFilter.endDate">
+      </div>
+
+      <!-- 期间汇总 -->
+      <div class="period-summary">
+        <span>筛选结果: {{ filteredTransactions.length }} 条</span>
+        <span>支出合计: ¥{{ formatMoney(filteredExpenseTotal) }}</span>
+        <span>收入合计: ¥{{ formatMoney(filteredIncomeTotal) }}</span>
+      </div>
+
+      <div class="transaction-list">
+        <div v-for="tx in filteredTransactions" :key="tx.id" class="transaction-item">
+          <div class="tx-icon" :class="'tx-' + tx.type">
+            {{ tx.type === 'expense' ? '📤' : tx.type === 'income' ? '📥' : '🔄' }}
+          </div>
+          <div class="tx-info">
+            <div class="tx-desc">{{ tx.description || tx.category }}</div>
+            <div class="tx-meta">
+              <template v-if="tx.type === 'transfer'">
+                {{ getCardName(tx.fromCardId) }} → {{ getCardName(tx.toCardId) }}
+              </template>
+              <template v-else>
+                {{ tx.category }} · {{ getCardName(tx.cardId) }}
+              </template>
+              · {{ formatDate(tx.date) }}
+            </div>
+          </div>
+          <div class="tx-actions">
+            <span class="tx-amount" :class="tx.type === 'income' ? 'positive' : (tx.type === 'expense' ? 'negative' : '')">
+              {{ tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : '' }}¥{{ formatMoney(tx.amount) }}
+            </span>
+            <button class="btn-icon small" @click="deleteTransaction(tx)" title="删除">✕</button>
+          </div>
+        </div>
+        <div v-if="filteredTransactions.length === 0" class="empty-state">暂无匹配的交易记录</div>
+      </div>
+    </div>
+
+    <!-- ==================== 数据分析 ==================== -->
+    <div v-if="currentView === 'analytics'" class="view">
+      <h1 class="view-title">数据分析</h1>
+
+      <!-- 周期选择 -->
+      <div class="period-selector">
+        <button @click="analyticsPeriodOffset--">◀</button>
+        <span class="period-label">{{ analyticsPeriodLabel }}</span>
+        <button @click="analyticsPeriodOffset < 0 && analyticsPeriodOffset++" :disabled="analyticsPeriodOffset >= 0">▶</button>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-box">
+          <div class="chart-title">每日消费趋势</div>
+          <canvas id="dailyTrendChart"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">支出分类占比</div>
+          <canvas id="categoryPieChart"></canvas>
+        </div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-box">
+          <div class="chart-title">收支对比（近6个月）</div>
+          <canvas id="monthlyCompareChart"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">消费趋势（近6个月）</div>
+          <canvas id="spendingLineChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 生活质量指标 -->
+      <div class="section-title">生活质量指标</div>
+      <div class="quality-indices">
+        <div class="index-card">
+          <div class="index-name">恩格尔系数</div>
+          <div class="index-desc">食品支出占比，越低代表生活水平越高</div>
+          <div class="index-value" :class="engelClass">{{ engelCoefficient }}%</div>
+          <div class="index-gauge">
+            <div class="gauge-fill" :style="{width: engelCoefficient + '%'}" :class="engelClass"></div>
+          </div>
+          <div class="index-rating">{{ engelRating }}</div>
+        </div>
+        <div class="index-card">
+          <div class="index-name">储蓄率</div>
+          <div class="index-desc">本期结余占收入比例</div>
+          <div class="index-value" :class="savingsRateClass">{{ savingsRate }}%</div>
+          <div class="index-gauge">
+            <div class="gauge-fill" :style="{width: Math.max(0, Math.min(100, savingsRate)) + '%'}" :class="savingsRateClass"></div>
+          </div>
+          <div class="index-rating">{{ savingsRateRating }}</div>
+        </div>
+        <div class="index-card">
+          <div class="index-name">消费波动</div>
+          <div class="index-desc">本期vs上期消费变化率</div>
+          <div class="index-value" :class="spendingChangeClass">{{ spendingChange > 0 ? '+' : '' }}{{ spendingChange }}%</div>
+          <div class="index-rating">{{ spendingChangeRating }}</div>
+        </div>
+        <div class="index-card">
+          <div class="index-name">生活质量综合评分</div>
+          <div class="index-desc">综合恩格尔系数、储蓄率等指标</div>
+          <div class="index-value score">{{ lifeQualityScore }}</div>
+          <div class="index-gauge">
+            <div class="gauge-fill score" :style="{width: lifeQualityScore + '%'}"></div>
+          </div>
+          <div class="index-rating">{{ lifeQualityRating }}</div>
+        </div>
+      </div>
+
+      <!-- 质量指标趋势 -->
+      <div class="chart-box full-width">
+        <div class="chart-title">生活质量指标变化趋势（近6个月）</div>
+        <canvas id="qualityTrendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- ==================== 数据导出 ==================== -->
+    <div v-if="currentView === 'export'" class="view">
+      <h1 class="view-title">数据导出</h1>
+      <div class="form-card">
+        <div class="form-row">
+          <label>选择账期</label>
+          <select v-model="exportPeriodOffset">
+            <option v-for="p in exportPeriodOptions" :key="p.offset" :value="p.offset">{{ p.label }}</option>
+          </select>
+        </div>
+        <div class="export-preview">
+          <div class="preview-header">
+            <span>预览 ({{ exportTransactions.length }} 条记录)</span>
+          </div>
+          <table class="preview-table" v-if="exportTransactions.length > 0">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>类型</th>
+                <th>分类</th>
+                <th>说明</th>
+                <th>金额</th>
+                <th>卡片</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="tx in exportTransactions" :key="tx.id">
+                <td>{{ formatDate(tx.date) }}</td>
+                <td>{{ {expense:'支出',income:'收入',transfer:'转账'}[tx.type] }}</td>
+                <td>{{ tx.category || '-' }}</td>
+                <td>{{ tx.description || '-' }}</td>
+                <td :class="tx.type === 'income' ? 'positive' : 'negative'">
+                  {{ tx.type === 'income' ? '+' : '-' }}¥{{ formatMoney(tx.amount) }}
+                </td>
+                <td>
+                  <template v-if="tx.type === 'transfer'">{{ getCardName(tx.fromCardId) }} → {{ getCardName(tx.toCardId) }}</template>
+                  <template v-else>{{ getCardName(tx.cardId) }}</template>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4"><strong>合计</strong></td>
+                <td class="negative"><strong>支出: ¥{{ formatMoney(exportExpenseTotal) }}</strong></td>
+                <td class="positive"><strong>收入: ¥{{ formatMoney(exportIncomeTotal) }}</strong></td>
+              </tr>
+            </tfoot>
+          </table>
+          <div v-else class="empty-state">该账期暂无记录</div>
+        </div>
+        <button class="btn btn-primary btn-block" @click="exportCSV" :disabled="exportTransactions.length === 0">
+          📥 导出 CSV 文件
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== 设置 ==================== -->
+    <div v-if="currentView === 'settings'" class="view">
+      <h1 class="view-title">设置</h1>
+      <div class="form-card">
+        <div class="form-row">
+          <label>发薪日</label>
+          <input type="number" v-model.number="settings.payday" min="1" max="28" @change="saveSettings">
+          <span class="form-hint">每月第几号为发薪日（默认10号）</span>
+        </div>
+        <div class="form-row">
+          <label>管理消费分类</label>
+          <div class="tag-list">
+            <span v-for="cat in expenseCategories" :key="cat.id" class="tag">
+              {{ cat.icon }} {{ cat.name }}
+              <button class="tag-remove" @click="deleteCategory(cat)">×</button>
+            </span>
+            <button class="tag add" @click="showModal('addCategory'); newCategory.type = 'expense'">+ 添加</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>管理收入分类</label>
+          <div class="tag-list">
+            <span v-for="cat in incomeCategories" :key="cat.id" class="tag">
+              {{ cat.icon }} {{ cat.name }}
+              <button class="tag-remove" @click="deleteCategory(cat)">×</button>
+            </span>
+            <button class="tag add" @click="showModal('addCategory'); newCategory.type = 'income'">+ 添加</button>
+          </div>
+        </div>
+        <hr>
+        <div class="form-row">
+          <label>云端账户</label>
+          <p class="form-hint">当前登录: {{ user.email }}</p>
+          <button class="btn btn-secondary" @click="handleLogout">退出登录</button>
+        </div>
+        <hr>
+        <div class="form-row">
+          <label>数据管理</label>
+          <div class="btn-group">
+            <button class="btn btn-secondary" @click="exportAllData">📦 导出全部数据</button>
+            <button class="btn btn-secondary" @click="$refs.importFile.click()">📂 导入数据</button>
+            <input type="file" ref="importFile" accept=".json" style="display:none" @change="importAllData">
+            <button class="btn btn-danger" @click="confirmClearData">🗑️ 清空所有数据</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  </template>
+
+  <!-- ==================== 弹窗 ==================== -->
+  <!-- 添加卡片弹窗 -->
+  <div class="modal-overlay" v-if="activeModal === 'addCard'" @click.self="closeModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>添加卡片</h2>
+        <button class="btn-icon" @click="closeModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>卡片名称</label>
+          <input type="text" v-model="newCard.name" placeholder="如：工商银行储蓄卡">
+        </div>
+        <div class="form-row">
+          <label>卡片类型</label>
+          <div class="type-tabs small">
+            <button :class="{active: newCard.type === 'debit'}" @click="newCard.type = 'debit'">储蓄卡</button>
+            <button :class="{active: newCard.type === 'credit'}" @click="newCard.type = 'credit'">信用卡</button>
+          </div>
+        </div>
+        <div class="form-row" v-if="newCard.type === 'debit'">
+          <label>初始余额</label>
+          <input type="number" v-model.number="newCard.balance" placeholder="0.00" step="0.01">
+        </div>
+        <div class="form-row" v-if="newCard.type === 'credit'">
+          <label>信用额度</label>
+          <input type="number" v-model.number="newCard.creditLimit" placeholder="信用额度" step="0.01">
+        </div>
+        <div class="form-row" v-if="newCard.type === 'credit'">
+          <label>当前待还金额</label>
+          <input type="number" v-model.number="newCard.balance" placeholder="已有负债金额（可为0）" step="0.01">
+        </div>
+        <div class="form-row">
+          <label>卡片颜色</label>
+          <div class="color-options">
+            <span v-for="c in cardColors" :key="c" class="color-dot"
+                  :style="{background: c}" :class="{active: newCard.color === c}"
+                  @click="newCard.color = c"></span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="closeModal">取消</button>
+        <button class="btn btn-primary" @click="addCard">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加分类弹窗 -->
+  <div class="modal-overlay" v-if="activeModal === 'addCategory'" @click.self="closeModal">
+    <div class="modal small">
+      <div class="modal-header">
+        <h2>添加分类</h2>
+        <button class="btn-icon" @click="closeModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>类型</label>
+          <div class="type-tabs small">
+            <button :class="{active: newCategory.type === 'expense'}" @click="newCategory.type = 'expense'">支出分类</button>
+            <button :class="{active: newCategory.type === 'income'}" @click="newCategory.type = 'income'">收入分类</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>分类名称</label>
+          <input type="text" v-model="newCategory.name" placeholder="如：交通出行">
+        </div>
+        <div class="form-row">
+          <label>图标（Emoji）</label>
+          <div class="emoji-picker">
+            <span v-for="e in emojiOptions" :key="e" class="emoji-option"
+                  :class="{active: newCategory.icon === e}" @click="newCategory.icon = e">{{ e }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="closeModal">取消</button>
+        <button class="btn btn-primary" @click="addCategory">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <transition name="toast">
+    <div class="toast" v-if="toast.show" :class="toast.type">{{ toast.message }}</div>
+  </transition>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
