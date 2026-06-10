@@ -710,25 +710,189 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-light); }
   
+  /* ========== Mobile Components (hidden on desktop) ========== */
+  .mobile-header { display: none; }
+  .mobile-user-overlay { display: none; }
+  .mobile-bottom-nav { display: none; }
+
   /* ========== Responsive ========== */
   @media (max-width: 768px) {
-    .sidebar {
-      width: var(--sidebar-collapsed);
+    /* 隐藏侧边栏，使用移动端导航替代 */
+    .sidebar { display: none !important; }
+
+    /* 主内容区适配 */
+    .main-content {
+      margin-left: 0 !important;
+      padding: 16px;
+      padding-top: calc(56px + 16px);
+      padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 16px);
     }
-    .sidebar .logo-text,
-    .sidebar .nav-text { display: none; }
-    .main-content { margin-left: var(--sidebar-collapsed); padding: 16px; }
-    .summary-row { grid-template-columns: repeat(2, 1fr); }
+
+    /* 迁移提示条下移到顶部栏下方 */
+    .migrate-banner { top: 56px; }
+
+    /* 移动端顶部栏 */
+    .mobile-header {
+      display: flex;
+      align-items: center;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: var(--sidebar-bg);
+      z-index: 300;
+      padding: 0 16px;
+      gap: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+
+    .mobile-header-logo { font-size: 22px; flex-shrink: 0; }
+
+    .mobile-header-title {
+      flex: 1;
+      font-size: 17px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .mobile-user-btn {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mobile-user-btn:active { background: rgba(255,255,255,0.3); }
+
+    /* 移动端用户弹出面板 */
+    .mobile-user-overlay {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(2px);
+    }
+
+    .mobile-user-panel {
+      position: absolute;
+      top: 56px;
+      right: 0;
+      width: 260px;
+      background: var(--surface);
+      border-radius: 0 0 0 var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .mobile-user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .mobile-user-avatar { font-size: 30px; }
+
+    .mobile-user-email {
+      font-size: 13px;
+      color: var(--text);
+      word-break: break-all;
+      font-weight: 500;
+    }
+
+    /* 移动端底部导航栏 */
+    .mobile-bottom-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: calc(60px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      z-index: 300;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.07);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .mobile-bottom-nav::-webkit-scrollbar { display: none; }
+
+    .mobile-bottom-nav a {
+      flex: 1;
+      min-width: 52px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 6px 2px;
+      cursor: pointer;
+      color: var(--text-light);
+      transition: color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      text-decoration: none;
+    }
+    .mobile-bottom-nav a.active { color: var(--primary); }
+    .mobile-bottom-nav a:active { opacity: 0.7; }
+
+    .mobile-nav-icon { font-size: 20px; line-height: 1; }
+    .mobile-nav-label { font-size: 10px; white-space: nowrap; font-weight: 500; }
+
+    /* 卡片网格 */
+    .summary-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .summary-card { padding: 16px; gap: 12px; }
+    .summary-icon { font-size: 28px; }
+    .summary-amount { font-size: 18px; }
+    .cards-grid, .cards-grid.large { grid-template-columns: 1fr; }
+
+    /* 图表 */
     .charts-row { grid-template-columns: 1fr; }
-    .filter-bar { flex-direction: column; }
+
+    /* 生活质量指标 */
+    .quality-indices { grid-template-columns: repeat(2, 1fr); }
+
+    /* 筛选栏 */
+    .filter-bar { flex-direction: column; gap: 8px; }
     .filter-bar select, .filter-bar input { width: 100%; }
-    .period-summary { flex-direction: column; gap: 4px; }
+    .filter-bar > span { display: none; }
+    .period-summary { flex-direction: column; gap: 6px; }
+
+    /* 表单 */
+    .form-card { padding: 20px 16px; }
     .type-tabs { flex-wrap: wrap; }
+    .type-tabs button { padding: 10px 8px; font-size: 14px; }
+
+    /* 标题 */
+    .view-title { font-size: 20px; margin-bottom: 16px; }
+    .section-title { margin: 20px 0 12px; }
+
+    /* 交易列表 */
+    .transaction-item { padding: 12px 16px; gap: 10px; }
+
+    /* 导出预览表格横向滚动 */
+    .export-preview { overflow-x: auto; }
+    .preview-table { min-width: 480px; }
   }
-  
+
   @media (max-width: 480px) {
     .summary-row { grid-template-columns: 1fr; }
-    .cards-grid { grid-template-columns: 1fr; }
+    .quality-indices { grid-template-columns: 1fr; }
+    .view-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .view-header .view-title { margin-bottom: 0; }
+    .bank-card { min-height: 120px; }
   }
   
   /* ========== Utility ========== */

@@ -86,6 +86,23 @@
     <button class="btn btn-secondary btn-sm" @click="showMigrateBanner = false">忽略</button>
   </div>
 
+  <!-- 移动端顶部栏 -->
+  <header class="mobile-header">
+    <span class="mobile-header-logo">💰</span>
+    <span class="mobile-header-title">{{ navItems.find(i => i.view === currentView)?.label || '记账助手' }}</span>
+    <button class="mobile-user-btn" @click="showMobileUserMenu = !showMobileUserMenu">👤</button>
+  </header>
+  <!-- 移动端用户菜单 -->
+  <div class="mobile-user-overlay" v-if="showMobileUserMenu" @click.self="showMobileUserMenu = false">
+    <div class="mobile-user-panel">
+      <div class="mobile-user-info">
+        <div class="mobile-user-avatar">💰</div>
+        <div class="mobile-user-email">{{ user.email }}</div>
+      </div>
+      <button class="btn btn-secondary btn-block" @click="handleLogout">退出登录</button>
+    </div>
+  </div>
+
   <!-- 侧边栏 -->
   <aside class="sidebar" :class="{collapsed: sidebarCollapsed}">
     <div class="sidebar-header">
@@ -630,6 +647,16 @@
       </div>
     </div>
   </div>
+
+  <!-- 移动端底部导航 -->
+  <nav class="mobile-bottom-nav">
+    <a v-for="item in navItems" :key="item.view"
+       @click="switchView(item.view)"
+       :class="{active: currentView === item.view}">
+      <span class="mobile-nav-icon">{{ item.icon }}</span>
+      <span class="mobile-nav-label">{{ item.label }}</span>
+    </a>
+  </nav>
 
   <!-- Toast 提示 -->
   <transition name="toast">

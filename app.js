@@ -105,6 +105,7 @@ const app = createApp({
 
       currentView: 'dashboard',
       sidebarCollapsed: false,
+      showMobileUserMenu: false,
       activeModal: null,
 
       cards: [],
@@ -392,14 +393,31 @@ const app = createApp({
       this.authLoading = false;
       return;
     }
-    FaStore.onAuthStateChange(async (session) => {
+
+    // 主动读取本地缓存的 session，避免刷新/重开时卡在加载界面
+    try {
+      const session = await FaStore.getSession();
       this.user = session?.user ?? null;
+      if (this.user) {
+        await this.loadCloudData();
+      }
+    } catch (err) {
+      this.user = null;
+    } finally {
+      this.authLoading = false;
+    }
+
+    // 监听后续登录 / 退出事件
+    FaStore.onAuthStateChange(async (session) => {
+      const newUser = session?.user ?? null;
+      // 用户未发生变化则跳过，避免重复加载
+      if (newUser?.id === this.user?.id) return;
+      this.user = newUser;
       if (this.user) {
         await this.loadCloudData();
       } else {
         this.resetLocalState();
       }
-      this.authLoading = false;
     });
   },
 
@@ -555,6 +573,7 @@ const app = createApp({
 
     switchView(view) {
       this.currentView = view;
+      this.showMobileUserMenu = false;
     },
 
     initRecordFilter() {
