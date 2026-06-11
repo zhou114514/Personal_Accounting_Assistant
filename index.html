@@ -397,9 +397,9 @@
 
       <!-- 周期选择 -->
       <div class="period-selector">
-        <button @click="analyticsPeriodOffset--">◀</button>
+        <button @click="changeAnalyticsPeriod(-1)">◀</button>
         <span class="period-label">{{ analyticsPeriodLabel }}</span>
-        <button @click="analyticsPeriodOffset < 0 && analyticsPeriodOffset++" :disabled="analyticsPeriodOffset >= 0">▶</button>
+        <button @click="changeAnalyticsPeriod(1)" :disabled="analyticsPeriodOffset >= 0">▶</button>
       </div>
 
       <div class="charts-row">

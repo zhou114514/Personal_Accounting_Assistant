@@ -55,6 +55,14 @@ const CARD_COLORS = [
   '#0891B2', '#2563EB', '#4338CA', '#374151',
 ];
 
+const ANALYTICS_CHART_IDS = [
+  'dailyTrendChart',
+  'categoryPieChart',
+  'monthlyCompareChart',
+  'spendingLineChart',
+  'qualityTrendChart',
+];
+
 const EMOJI_OPTIONS = [
   '🍜','🍔','🍕','☕','🚌','🚗','✈️','🚇',
   '🛒','🎮','🎬','🎵','🏠','💡','📱','💻',
@@ -162,6 +170,7 @@ const app = createApp({
       toast: { show: false, message: '', type: 'info' },
 
       chartInstances: {},
+      _chartRenderGen: 0,
     };
   },
 
@@ -398,11 +407,14 @@ const app = createApp({
   },
 
   watch: {
-    currentView() {
-      nextTick(() => this.renderCurrentCharts());
+    currentView(newView, oldView) {
+      if (oldView === 'analytics') {
+        this.destroyAnalyticsCharts();
+      }
+      this.scheduleChartRender();
     },
     analyticsPeriodOffset() {
-      nextTick(() => this.renderCurrentCharts());
+      this.scheduleChartRender();
     },
   },
 
@@ -493,7 +505,7 @@ const app = createApp({
         }
 
         this.initRecordFilter();
-        nextTick(() => this.renderCurrentCharts());
+        this.scheduleChartRender();
       } catch (err) {
         this.showToast('加载数据失败: ' + err.message, 'error');
       } finally {
@@ -635,6 +647,12 @@ const app = createApp({
     switchView(view) {
       this.currentView = view;
       this.showMobileUserMenu = false;
+    },
+
+    changeAnalyticsPeriod(delta) {
+      const next = this.analyticsPeriodOffset + delta;
+      if (delta > 0 && next > 0) return;
+      this.analyticsPeriodOffset = next;
     },
 
     initRecordFilter() {
@@ -838,7 +856,7 @@ const app = createApp({
         };
 
         this.showToast('记账成功', 'success');
-        nextTick(() => this.renderCurrentCharts());
+        this.scheduleChartRender();
       } catch (err) {
         this.reverseCardBalance(tx);
         this.showToast('记账失败: ' + err.message, 'error');
@@ -1018,7 +1036,7 @@ const app = createApp({
             this.incomeCategories = income;
             this.settings = { payday: 10 };
             this.showToast('所有数据已清空', 'success');
-            nextTick(() => this.renderCurrentCharts());
+            this.scheduleChartRender();
           }).catch(err => {
             this.showToast('清空失败: ' + err.message, 'error');
           }).finally(() => {
@@ -1029,20 +1047,65 @@ const app = createApp({
     },
 
     // ========== 图表 ==========
+    scheduleChartRender() {
+      this._chartRenderGen += 1;
+      const generation = this._chartRenderGen;
+      nextTick(() => {
+        if (generation !== this._chartRenderGen) return;
+        this.renderCurrentCharts();
+      });
+    },
+
     destroyChart(id) {
-      if (this.chartInstances[id]) {
-        this.chartInstances[id].destroy();
-        delete this.chartInstances[id];
+      const canvas = document.getElementById(id);
+      if (canvas) {
+        const existing = Chart.getChart(canvas);
+        if (existing) {
+          existing.stop();
+          existing.destroy();
+        }
       }
+      delete this.chartInstances[id];
+    },
+
+    destroyAnalyticsCharts() {
+      ANALYTICS_CHART_IDS.forEach(id => this.destroyChart(id));
     },
 
     createChart(canvasId, config) {
       const canvas = document.getElementById(canvasId);
       if (!canvas) return null;
       this.destroyChart(canvasId);
-      const chart = new Chart(canvas.getContext('2d'), config);
-      this.chartInstances[canvasId] = chart;
-      return chart;
+      try {
+        const chart = new Chart(canvas.getContext('2d'), config);
+        this.chartInstances[canvasId] = chart;
+        return chart;
+      } catch (err) {
+        console.error(`图表渲染失败 (${canvasId}):`, err);
+        return null;
+      }
+    },
+
+    upsertChart(canvasId, config) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return null;
+
+      const existing = Chart.getChart(canvas);
+      if (existing && existing.config.type === config.type) {
+        try {
+          existing.stop();
+          existing.data.labels = config.data.labels;
+          existing.data.datasets = config.data.datasets.map(ds => ({ ...ds }));
+          existing.update('active');
+          this.chartInstances[canvasId] = existing;
+          return existing;
+        } catch (err) {
+          console.error(`图表更新失败 (${canvasId}):`, err);
+          this.destroyChart(canvasId);
+        }
+      }
+
+      return this.createChart(canvasId, config);
     },
 
     renderCurrentCharts() {
@@ -1162,7 +1225,7 @@ const app = createApp({
         d.setDate(d.getDate() + 1);
       }
 
-      this.createChart('dailyTrendChart', {
+      this.upsertChart('dailyTrendChart', {
         type: 'bar',
         data: {
           labels,
@@ -1191,7 +1254,7 @@ const app = createApp({
       const cats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
       const colors = ['#4F46E5','#7C3AED','#DB2777','#EF4444','#F59E0B','#10B981','#0891B2','#6366F1','#EC4899','#84CC16','#F97316'];
 
-      this.createChart('categoryPieChart', {
+      this.upsertChart('categoryPieChart', {
         type: 'doughnut',
         data: {
           labels: cats.map(c => c[0]),
@@ -1224,7 +1287,7 @@ const app = createApp({
         incData.push(periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0));
       }
 
-      this.createChart('monthlyCompareChart', {
+      this.upsertChart('monthlyCompareChart', {
         type: 'bar',
         data: {
           labels,
@@ -1262,7 +1325,7 @@ const app = createApp({
         data.push(total);
       }
 
-      this.createChart('spendingLineChart', {
+      this.upsertChart('spendingLineChart', {
         type: 'line',
         data: {
           labels,
@@ -1332,7 +1395,7 @@ const app = createApp({
         scoreData.push(score);
       }
 
-      this.createChart('qualityTrendChart', {
+      this.upsertChart('qualityTrendChart', {
         type: 'line',
         data: {
           labels,
