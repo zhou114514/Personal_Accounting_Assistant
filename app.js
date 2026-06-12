@@ -1135,7 +1135,7 @@ const app = createApp({
       const d = new Date(start);
       const today = new Date();
       while (d < end && d <= today) {
-        const key = d.toISOString().slice(0, 10);
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         labels.push(`${d.getMonth()+1}/${d.getDate()}`);
         data.push(dailyMap[key] || 0);
         d.setDate(d.getDate() + 1);
@@ -1219,7 +1219,7 @@ const app = createApp({
       const today = new Date();
       const limit = this.analyticsPeriodOffset < 0 ? end : (today < end ? today : end);
       while (d < limit) {
-        const key = d.toISOString().slice(0, 10);
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         labels.push(`${d.getMonth()+1}/${d.getDate()}`);
         data.push(dailyMap[key] || 0);
         d.setDate(d.getDate() + 1);
