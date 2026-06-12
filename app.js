@@ -437,6 +437,12 @@ const app = createApp({
       this.authLoading = false;
     }
 
+    // authLoading 变为 false 后主模板才会渲染出 canvas 元素，
+    // 需要在这里再触发一次图表渲染，确保 canvas 已挂载到 DOM
+    if (this.user) {
+      this.scheduleChartRender();
+    }
+
     // 监听后续登录 / 退出事件
     FaStore.onAuthStateChange(async (session) => {
       const newUser = session?.user ?? null;
@@ -1191,6 +1197,7 @@ const app = createApp({
         options: {
           responsive: true,
           maintainAspectRatio: true,
+          aspectRatio: 2,
           cutout: '55%',
           plugins: {
             legend: { position: 'right', labels: { boxWidth: 12, padding: 12, font: { size: 12 } } },
@@ -1262,6 +1269,7 @@ const app = createApp({
         },
         options: {
           responsive: true,
+          aspectRatio: 2,
           cutout: '55%',
           plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 12 } } } },
         },
