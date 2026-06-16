@@ -55,6 +55,12 @@ const CARD_COLORS = [
   '#0891B2', '#2563EB', '#4338CA', '#374151',
 ];
 
+// Paul Tol bright 配色扩展，色相分散、色盲友好
+const CHART_CATEGORY_COLORS = [
+  '#4477AA', '#EE6677', '#228833', '#CCBB44', '#66CCEE',
+  '#AA3377', '#EE7733', '#009988', '#CC3311', '#7A5195', '#5C5C5C',
+];
+
 const ANALYTICS_CHART_IDS = [
   'dailyTrendChart',
   'categoryPieChart',
@@ -170,6 +176,7 @@ const app = createApp({
       toast: { show: false, message: '', type: 'info' },
 
       chartInstances: {},
+      selectedDoughnutIndex: {},
       _chartRenderGen: 0,
     };
   },
@@ -1174,6 +1181,63 @@ const app = createApp({
       });
     },
 
+    getDoughnutColors(canvasId, count) {
+      let selected = this.selectedDoughnutIndex[canvasId];
+      if (selected != null && selected >= count) {
+        this.selectedDoughnutIndex[canvasId] = null;
+        selected = null;
+      }
+      const base = CHART_CATEGORY_COLORS.slice(0, count);
+      if (selected == null) return base;
+      // 未选中的扇区降至 35% 不透明度，选中扇区保持原色
+      return base.map((color, i) => (i === selected ? color : color + '59'));
+    },
+
+    buildDoughnutConfig(canvasId, labels, values) {
+      const count = values.length;
+      return {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: this.getDoughnutColors(canvasId, count),
+            borderColor: '#FFFFFF',
+            borderWidth: 2,
+            hoverBorderColor: '#FFFFFF',
+            hoverBorderWidth: 3,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 2,
+          cutout: '55%',
+          layout: { padding: 24 },
+          onClick: (_event, elements, chart) => {
+            if (!elements.length) {
+              // 点击空白区域取消选中
+              this.selectedDoughnutIndex[canvasId] = null;
+              chart.data.datasets[0].backgroundColor = this.getDoughnutColors(canvasId, chart.data.datasets[0].data.length);
+              chart.update('none');
+              return;
+            }
+            const index = elements[0].index;
+            const current = this.selectedDoughnutIndex[canvasId];
+            this.selectedDoughnutIndex[canvasId] = current === index ? null : index;
+            chart.data.datasets[0].backgroundColor = this.getDoughnutColors(canvasId, chart.data.datasets[0].data.length);
+            chart.update('none');
+          },
+          plugins: {
+            legend: { position: 'right', labels: { boxWidth: 12, padding: 12, font: { size: 12 } } },
+          },
+          elements: {
+            arc: { hoverOffset: 22 },
+          },
+        },
+      };
+    },
+
     renderDashCategory() {
       const txs = this.currentPeriodTransactions.filter(t => t.type === 'expense');
       const catMap = {};
@@ -1182,28 +1246,11 @@ const app = createApp({
       });
 
       const cats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
-      const colors = ['#4F46E5','#7C3AED','#DB2777','#EF4444','#F59E0B','#10B981','#0891B2','#6366F1','#EC4899','#84CC16','#F97316'];
-
-      this.createChart('dashCategoryChart', {
-        type: 'doughnut',
-        data: {
-          labels: cats.map(c => c[0]),
-          datasets: [{
-            data: cats.map(c => c[1]),
-            backgroundColor: colors.slice(0, cats.length),
-            borderWidth: 0,
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          aspectRatio: 2,
-          cutout: '55%',
-          plugins: {
-            legend: { position: 'right', labels: { boxWidth: 12, padding: 12, font: { size: 12 } } },
-          },
-        },
-      });
+      this.createChart('dashCategoryChart', this.buildDoughnutConfig(
+        'dashCategoryChart',
+        cats.map(c => c[0]),
+        cats.map(c => c[1]),
+      ));
     },
 
     renderAnalyticsCharts() {
@@ -1259,21 +1306,12 @@ const app = createApp({
       const catMap = {};
       txs.forEach(tx => { catMap[tx.category] = (catMap[tx.category] || 0) + tx.amount; });
       const cats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
-      const colors = ['#4F46E5','#7C3AED','#DB2777','#EF4444','#F59E0B','#10B981','#0891B2','#6366F1','#EC4899','#84CC16','#F97316'];
 
-      this.upsertChart('categoryPieChart', {
-        type: 'doughnut',
-        data: {
-          labels: cats.map(c => c[0]),
-          datasets: [{ data: cats.map(c => c[1]), backgroundColor: colors.slice(0, cats.length), borderWidth: 0 }],
-        },
-        options: {
-          responsive: true,
-          aspectRatio: 2,
-          cutout: '55%',
-          plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 12 } } } },
-        },
-      });
+      this.upsertChart('categoryPieChart', this.buildDoughnutConfig(
+        'categoryPieChart',
+        cats.map(c => c[0]),
+        cats.map(c => c[1]),
+      ));
     },
 
     renderMonthlyCompare() {
