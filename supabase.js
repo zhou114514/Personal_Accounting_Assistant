@@ -231,6 +231,29 @@ const FaStore = (() => {
     });
   }
 
+  /**
+   * 订阅当前用户所有表的实时变更。
+   * 任意表发生 INSERT / UPDATE / DELETE 时调用 onChange。
+   * 返回取消订阅函数。
+   */
+  function subscribeDataChanges(userId, onChange) {
+    const sb = getClient();
+    const tables = ['cards', 'transactions', 'categories', 'user_settings'];
+    const channels = tables.map(table =>
+      sb.channel(`fa-sync-${table}-${userId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table,
+          filter: `user_id=eq.${userId}`,
+        }, onChange)
+        .subscribe()
+    );
+    return function unsubscribe() {
+      channels.forEach(ch => sb.removeChannel(ch));
+    };
+  }
+
   return {
     isConfigured,
     getClient,
@@ -250,5 +273,6 @@ const FaStore = (() => {
     seedDefaults,
     replaceAllData,
     clearAllData,
+    subscribeDataChanges,
   };
 })();

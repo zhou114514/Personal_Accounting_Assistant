@@ -437,6 +437,7 @@ const app = createApp({
       this.user = session?.user ?? null;
       if (this.user) {
         await this.loadCloudData();
+        this.startRealtime(this.user.id);
       }
     } catch (err) {
       this.user = null;
@@ -458,21 +459,57 @@ const app = createApp({
       this.user = newUser;
       if (this.user) {
         await this.loadCloudData();
+        this.startRealtime(this.user.id);
       } else {
         this.resetLocalState();
       }
     });
+
+    // 页面重新可见时（从后台切回、从休眠恢复）补刷一次，
+    // 作为 Realtime 断线兜底
+    this._visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && this.user) {
+        this.loadCloudData();
+      }
+    };
+    document.addEventListener('visibilitychange', this._visibilityHandler);
+  },
+
+  beforeUnmount() {
+    this.stopRealtime();
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
   },
 
   methods: {
     // ========== 认证与云端同步 ==========
     resetLocalState() {
+      this.stopRealtime();
       this.cards = [];
       this.transactions = [];
       this.expenseCategories = [];
       this.incomeCategories = [];
       this.settings = { payday: 10 };
       this.showMigrateBanner = false;
+    },
+
+    startRealtime(userId) {
+      this.stopRealtime();
+      this._realtimeUnsubscribe = FaStore.subscribeDataChanges(userId, () => {
+        // 防抖：500ms 内连续触发只刷新一次
+        clearTimeout(this._realtimeDebounce);
+        this._realtimeDebounce = setTimeout(() => this.loadCloudData(), 500);
+      });
+    },
+
+    stopRealtime() {
+      clearTimeout(this._realtimeDebounce);
+      if (this._realtimeUnsubscribe) {
+        this._realtimeUnsubscribe();
+        this._realtimeUnsubscribe = null;
+      }
     },
 
     // 按名称去重，保留每个名称的第一条（防止数据库中存在重复分类记录）
