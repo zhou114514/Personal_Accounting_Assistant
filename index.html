@@ -197,6 +197,12 @@
         <div class="chart-box">
           <div class="chart-title">支出分类占比</div>
           <canvas id="dashCategoryChart"></canvas>
+          <div v-if="doughnutChartData['dashCategoryChart']" class="doughnut-selected-info">
+            <span class="selected-cat-label">显示合计</span>
+            <span class="selected-cat-sep">·</span>
+            <span class="selected-cat-amount">¥{{ formatMoney(visibleDoughnutTotal('dashCategoryChart')) }}</span>
+            <span v-if="(hiddenDoughnutIndices['dashCategoryChart'] || []).length > 0" class="selected-cat-hint">（已隐藏 {{ hiddenDoughnutIndices['dashCategoryChart'].length }} 项）</span>
+          </div>
         </div>
       </div>
 
@@ -410,6 +416,12 @@
         <div class="chart-box">
           <div class="chart-title">支出分类占比</div>
           <canvas id="categoryPieChart"></canvas>
+          <div v-if="doughnutChartData['categoryPieChart']" class="doughnut-selected-info">
+            <span class="selected-cat-label">显示合计</span>
+            <span class="selected-cat-sep">·</span>
+            <span class="selected-cat-amount">¥{{ formatMoney(visibleDoughnutTotal('categoryPieChart')) }}</span>
+            <span v-if="(hiddenDoughnutIndices['categoryPieChart'] || []).length > 0" class="selected-cat-hint">（已隐藏 {{ hiddenDoughnutIndices['categoryPieChart'].length }} 项）</span>
+          </div>
         </div>
       </div>
       <div class="charts-row">

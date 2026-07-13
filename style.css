@@ -271,6 +271,30 @@
     margin-bottom: 12px;
   }
   
+  /* ========== Doughnut Chart Selected Info ========== */
+  .doughnut-selected-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: var(--primary-bg);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    animation: fadeInUp 0.2s ease;
+  }
+
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .selected-cat-label { font-weight: 600; color: var(--text); }
+  .selected-cat-sep { color: var(--text-light); }
+  .selected-cat-amount { font-weight: 700; color: var(--danger); font-size: 15px; }
+  .selected-cat-hint { font-size: 12px; color: var(--text-secondary); }
+
   /* ========== Transaction List ========== */
   .transaction-list {
     background: var(--surface);

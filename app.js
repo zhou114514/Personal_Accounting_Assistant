@@ -177,6 +177,8 @@ const app = createApp({
 
       chartInstances: {},
       selectedDoughnutIndex: {},
+      doughnutChartData: {},
+      hiddenDoughnutIndices: {},
       _chartRenderGen: 0,
     };
   },
@@ -703,6 +705,7 @@ const app = createApp({
       const next = this.analyticsPeriodOffset + delta;
       if (delta > 0 && next > 0) return;
       this.analyticsPeriodOffset = next;
+      this.selectedDoughnutIndex['categoryPieChart'] = null;
     },
 
     initRecordFilter() {
@@ -1146,7 +1149,7 @@ const app = createApp({
           existing.stop();
           existing.data.labels = config.data.labels;
           existing.data.datasets = config.data.datasets.map(ds => ({ ...ds }));
-          existing.update('active');
+          existing.update('none');
           this.chartInstances[canvasId] = existing;
           return existing;
         } catch (err) {
@@ -1232,6 +1235,14 @@ const app = createApp({
 
     buildDoughnutConfig(canvasId, labels, values) {
       const count = values.length;
+      // 若分类标签发生变化，重置选中高亮和图例隐藏状态
+      const prevData = this.doughnutChartData[canvasId];
+      if (!prevData || JSON.stringify(prevData.labels) !== JSON.stringify(labels)) {
+        this.selectedDoughnutIndex[canvasId] = null;
+        this.hiddenDoughnutIndices[canvasId] = [];
+      }
+      // 存储图表数据供模板响应式展示
+      this.doughnutChartData[canvasId] = { labels: [...labels], values: [...values] };
       return {
         type: 'doughnut',
         data: {
@@ -1253,7 +1264,6 @@ const app = createApp({
           layout: { padding: 24 },
           onClick: (_event, elements, chart) => {
             if (!elements.length) {
-              // 点击空白区域取消选中
               this.selectedDoughnutIndex[canvasId] = null;
               chart.data.datasets[0].backgroundColor = this.getDoughnutColors(canvasId, chart.data.datasets[0].data.length);
               chart.update('none');
@@ -1266,7 +1276,23 @@ const app = createApp({
             chart.update('none');
           },
           plugins: {
-            legend: { position: 'right', labels: { boxWidth: 12, padding: 12, font: { size: 12 } } },
+            legend: {
+              position: 'right',
+              labels: { boxWidth: 12, padding: 12, font: { size: 12 } },
+              onClick: (e, legendItem, legend) => {
+                const chart = legend.chart;
+                const index = legendItem.index;
+                // 圆环/饼图须按数据点索引切换可见性，不可用默认的数据集隐藏逻辑
+                chart.toggleDataVisibility(index);
+                chart.update('none');
+                // 同步更新 Vue 中追踪的隐藏索引列表
+                const hidden = [];
+                for (let i = 0; i < (chart.data.labels?.length || 0); i++) {
+                  if (!chart.getDataVisibility(i)) hidden.push(i);
+                }
+                this.hiddenDoughnutIndices[canvasId] = [...hidden];
+              },
+            },
           },
           elements: {
             arc: { hoverOffset: 22 },
@@ -1344,11 +1370,34 @@ const app = createApp({
       txs.forEach(tx => { catMap[tx.category] = (catMap[tx.category] || 0) + tx.amount; });
       const cats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
 
-      this.upsertChart('categoryPieChart', this.buildDoughnutConfig(
+      // 重置隐藏状态，确保切换月份后图例全部恢复显示
+      this.hiddenDoughnutIndices['categoryPieChart'] = [];
+
+      const chart = this.upsertChart('categoryPieChart', this.buildDoughnutConfig(
         'categoryPieChart',
         cats.map(c => c[0]),
         cats.map(c => c[1]),
       ));
+
+      // 重置 Chart.js 内部每个数据点的可见性
+      if (chart) {
+        const count = chart.data.labels?.length || 0;
+        let needUpdate = false;
+        for (let i = 0; i < count; i++) {
+          if (!chart.getDataVisibility(i)) {
+            chart.toggleDataVisibility(i);
+            needUpdate = true;
+          }
+        }
+        if (needUpdate) chart.update('none');
+      }
+    },
+
+    visibleDoughnutTotal(canvasId) {
+      const data = this.doughnutChartData[canvasId];
+      if (!data) return 0;
+      const hidden = this.hiddenDoughnutIndices[canvasId] || [];
+      return data.values.reduce((sum, v, i) => (hidden.includes(i) ? sum : sum + v), 0);
     },
 
     renderMonthlyCompare() {
