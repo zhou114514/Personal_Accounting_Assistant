@@ -1262,6 +1262,16 @@ const app = createApp({
           aspectRatio: 2,
           cutout: '55%',
           layout: { padding: 24 },
+          animation: {
+            duration: 480,
+            easing: 'easeOutCubic',
+          },
+          animations: {
+            numbers: {
+              type: 'number',
+              properties: ['circumference', 'startAngle', 'endAngle'],
+            },
+          },
           onClick: (_event, elements, chart) => {
             if (!elements.length) {
               this.selectedDoughnutIndex[canvasId] = null;
@@ -1282,9 +1292,9 @@ const app = createApp({
               onClick: (e, legendItem, legend) => {
                 const chart = legend.chart;
                 const index = legendItem.index;
-                // 圆环/饼图须按数据点索引切换可见性，不可用默认的数据集隐藏逻辑
+                // 切换可见性后用默认动画更新：隐藏块的圆周角缩为 0，其余块补位
                 chart.toggleDataVisibility(index);
-                chart.update('none');
+                chart.update();
                 // 同步更新 Vue 中追踪的隐藏索引列表
                 const hidden = [];
                 for (let i = 0; i < (chart.data.labels?.length || 0); i++) {
